@@ -105,9 +105,14 @@ export async function listProducts(
   if (categoryIds.length) productMatch.categoryId = { $in: categoryIds };
 
   // If a selected filter has no matching docs (e.g. bad slug), the resulting
-  // empty $in would match nothing, which is the correct UX.
+  // empty $in would match nothing, which is the correct UX. We check all four
+  // dimensions — color/size are applied via a variants $match further down, so
+  // an empty id list there would silently skip the stage and return the full
+  // catalog.
   if (query.genders?.length && !genderIds.length) return [];
   if (query.categories?.length && !categoryIds.length) return [];
+  if (query.colors?.length && !colorIds.length) return [];
+  if (query.sizes?.length && !sizeIds.length) return [];
 
   const pipeline: PipelineStage[] = [
     { $match: productMatch },
