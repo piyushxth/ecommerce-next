@@ -127,17 +127,33 @@ export async function listProducts(
     },
   ];
 
-  // Apply color/size filters on the variant join so a product only matches if
-  // *some* variant satisfies both. We filter the `variants` array too so the
-  // color swatches on the card reflect what's actually available.
-  if (colorIds.length) {
+  // Variant-level filters. We want a product to match only if a single variant
+  // satisfies every active dimension simultaneously — so color=red+size=l must
+  // match the same variant, not red from one variant and l from another. Use
+  // $elemMatch to express the AND across array elements.
+  const variantElem: Record<string, unknown> = {};
+  if (colorIds.length) variantElem.colorId = { $in: colorIds };
+  if (sizeIds.length) variantElem.sizeId = { $in: sizeIds };
+  if (Object.keys(variantElem).length) {
+    pipeline.push({ $match: { variants: { $elemMatch: variantElem } } });
+
+    // Narrow the embedded `variants` array to the ones that actually match,
+    // so the derived price/color/sale fields below reflect only variants the
+    // user asked for (e.g. filtering by size XL shouldn't show the size-S
+    // price or a color swatch only available in size S).
+    const conds: Array<Record<string, unknown>> = [];
+    if (colorIds.length) conds.push({ $in: ["$$v.colorId", colorIds] });
+    if (sizeIds.length) conds.push({ $in: ["$$v.sizeId", sizeIds] });
     pipeline.push({
-      $match: { "variants.colorId": { $in: colorIds } },
-    });
-  }
-  if (sizeIds.length) {
-    pipeline.push({
-      $match: { "variants.sizeId": { $in: sizeIds } },
+      $set: {
+        variants: {
+          $filter: {
+            input: "$variants",
+            as: "v",
+            cond: conds.length === 1 ? conds[0] : { $and: conds },
+          },
+        },
+      },
     });
   }
 
