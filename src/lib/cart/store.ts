@@ -151,8 +151,13 @@ export const useCartStore = create<CartState>()(
 
         try {
           const authoritative = await apiAddItem(item.variantId, quantity);
+          // Re-check mode — the user may have signed out mid-flight, in
+          // which case <CartBootstrap> already applied resetToGuest([]) and
+          // we must not resurrect the previous user's items.
+          if (get().mode !== "user") return;
           set({ items: authoritative });
         } catch {
+          if (get().mode !== "user") return;
           // Revert to pre-optimistic state. The server is the source of
           // truth when signed in.
           set({ items });
@@ -168,8 +173,10 @@ export const useCartStore = create<CartState>()(
 
         try {
           const authoritative = await apiRemoveItem(variantId);
+          if (get().mode !== "user") return;
           set({ items: authoritative });
         } catch {
+          if (get().mode !== "user") return;
           set({ items });
         }
       },
@@ -188,8 +195,10 @@ export const useCartStore = create<CartState>()(
 
         try {
           const authoritative = await apiSetQuantity(variantId, quantity);
+          if (get().mode !== "user") return;
           set({ items: authoritative });
         } catch {
+          if (get().mode !== "user") return;
           set({ items });
         }
       },
@@ -199,12 +208,15 @@ export const useCartStore = create<CartState>()(
     {
       name: "ecom-cart",
       storage: createJSONStorage(() => localStorage),
-      // Persist only the items list; mode is derived on boot from the
-      // session, and isOpen is ephemeral UI state.
-      partialize: (s) => ({ items: s.items }),
-      // Don't write back to localStorage while signed in — the server is
-      // authoritative and we don't want stale cross-user leakage on a
-      // shared machine.
+      // Persist only the items list, and only while in guest mode. The
+      // persist middleware fires on *every* state change; if we returned
+      // items unconditionally, any UI interaction (openCart, qty bump,
+      // etc.) while signed in would re-write the previous user's cart to
+      // localStorage, defeating the cross-user leakage protection in
+      // hydrateServerCart / mergeAndHydrateServerCart. Gating on mode
+      // means user-mode writes always serialize `items: []` so the next
+      // guest session starts empty.
+      partialize: (s) => ({ items: s.mode === "guest" ? s.items : [] }),
       skipHydration: false,
       onRehydrateStorage: () => () => {
         useCartStore.setState({ hasHydrated: true });

@@ -164,9 +164,10 @@ export async function getCartForUser(userId: string): Promise<ServerCart> {
   return { items };
 }
 
-// Validates the variant exists, pulls live `inStock`, merges with any existing
-// row via atomic `$inc`, clamps result. Returns the *new* authoritative qty
-// for this line (or 0 if removed).
+// Validates the variant exists, pulls live `inStock`, and merges with any
+// existing row via an atomic `$inc` upsert so two concurrent add-to-cart
+// requests can't lose an increment. The post-$inc value is then clamped to
+// `min(MAX_QTY_PER_ITEM, inStock)` with a corrective `$set` if needed.
 export async function addItemToServerCart(
   userId: string,
   input: { variantId: string; quantity: number },
@@ -185,32 +186,33 @@ export async function addItemToServerCart(
 
   const cartId = await getOrCreateUserCartId(uid);
 
-  // Find the existing row so we can compute the clamped result.
-  const existing = await CartItem.findOne({
-    cartId,
-    productVariantId: vid,
-  })
-    .select({ quantity: 1 })
-    .lean();
-
-  const nextQty = clampAgainstStock(
-    (existing?.quantity ?? 0) + qtyIn,
-    variant.inStock,
-  );
-
-  if (nextQty <= 0) {
-    // Stock dropped to 0 after add-to-cart; refuse to create / keep the row.
-    if (existing) {
-      await CartItem.deleteOne({ _id: existing._id });
-    }
+  // If the variant can't hold any stock, ensure we don't leave a stale
+  // row lying around and bail out.
+  const ceiling = Math.min(MAX_QTY_PER_ITEM, Math.max(variant.inStock, 0));
+  if (ceiling <= 0) {
+    await CartItem.deleteOne({ cartId, productVariantId: vid });
     return getCartForUser(userId);
   }
 
-  await CartItem.updateOne(
+  // Atomic upsert + increment. Two concurrent calls both apply their own
+  // $inc, so nothing is lost. `returnDocument: "after"` gives us the
+  // post-$inc quantity in one round trip.
+  const updated = await CartItem.findOneAndUpdate(
     { cartId, productVariantId: vid },
-    { $set: { quantity: nextQty } },
-    { upsert: true },
-  );
+    { $inc: { quantity: qtyIn }, $setOnInsert: { cartId, productVariantId: vid } },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  )
+    .select({ quantity: 1 })
+    .lean();
+
+  if (updated && updated.quantity > ceiling) {
+    // The race could push us past the ceiling; clamp corrective-style so
+    // clients always see a consistent bounded value.
+    await CartItem.updateOne(
+      { _id: updated._id },
+      { $set: { quantity: ceiling } },
+    );
+  }
 
   return getCartForUser(userId);
 }
