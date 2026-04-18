@@ -218,8 +218,19 @@ export const useCartStore = create<CartState>()(
       // guest session starts empty.
       partialize: (s) => ({ items: s.mode === "guest" ? s.items : [] }),
       skipHydration: false,
+      // Zustand fires the rehydration finisher synchronously during
+      // `create(persist(...))`, which means `useCartStore` is still in its
+      // temporal dead zone when the finisher runs on initial load — calling
+      // `useCartStore.setState(...)` here throws a ReferenceError that
+      // zustand silently swallows, leaving `hasHydrated` stuck at `false`.
+      // Defer the write to a microtask so the store binding is assigned
+      // before we touch it. Without this, <CartBootstrap/> never progresses
+      // past its `if (!hasHydrated) return` guard, so signed-in users'
+      // carts never sync to the server.
       onRehydrateStorage: () => () => {
-        useCartStore.setState({ hasHydrated: true });
+        queueMicrotask(() => {
+          useCartStore.setState({ hasHydrated: true });
+        });
       },
     },
   ),
