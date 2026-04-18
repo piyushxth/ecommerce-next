@@ -142,7 +142,21 @@ export function ProductDetail({ product }: Props) {
                     type="button"
                     aria-label={`Select colour ${c.name}`}
                     aria-pressed={active}
-                    onClick={() => setSelectedColorId(c.id)}
+                    onClick={() => {
+                      setSelectedColorId(c.id);
+                      // If the previously selected size isn't available for the
+                      // new color, clear it so the size picker doesn't show a
+                      // disabled button as active.
+                      if (selectedSizeId) {
+                        const stillAvailable = product.variants.some(
+                          (v) =>
+                            v.color.id === c.id &&
+                            v.size.id === selectedSizeId &&
+                            v.inStock > 0,
+                        );
+                        if (!stillAvailable) setSelectedSizeId(null);
+                      }
+                    }}
                     className={`relative h-10 w-10 overflow-hidden rounded-full border transition ${
                       active
                         ? "border-neutral-900 ring-1 ring-neutral-900 ring-offset-2 dark:border-white dark:ring-white"
