@@ -41,6 +41,48 @@ export type ProductQuery = {
   sort?: SortKey;
 };
 
+// Detailed per-product data used by the product detail page. The server
+// pre-computes this in one aggregation so the client carousel + pickers can
+// filter/change state without extra network round-trips.
+export type ProductDetailImage = {
+  id: string;
+  url: string;
+  // The variant this image belongs to (nullable for "general" product shots).
+  variantId: string | null;
+  // Flattened color slug of the image's variant, for easy client-side filtering.
+  colorSlug: string | null;
+  sortOrder: number;
+  isPrimary: boolean;
+};
+
+export type ProductDetailVariant = {
+  id: string;
+  sku: string;
+  price: number;
+  salePrice: number | null;
+  inStock: number;
+  color: { id: string; name: string; slug: string; hexCode: string };
+  size: { id: string; name: string; slug: string; sortOrder: number };
+};
+
+export type ProductDetail = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  gender: { id: string; label: string; slug: string };
+  category: { id: string; name: string; slug: string };
+  price: number; // lowest full price across variants
+  salePrice: number | null; // lowest sale price (if any variant is on sale)
+  isOnSale: boolean;
+  variants: ProductDetailVariant[];
+  images: ProductDetailImage[];
+  // Flattened distinct color list derived from variants, preserving insertion order.
+  colors: { id: string; name: string; slug: string; hexCode: string }[];
+  // Flattened distinct size list sorted by sortOrder.
+  sizes: { id: string; name: string; slug: string; sortOrder: number }[];
+};
+
 // Parse a comma-separated query-string value into a deduped slug list.
 export function parseSlugList(value: string | string[] | undefined): string[] {
   if (!value) return [];
