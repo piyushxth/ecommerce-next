@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 
 import { ProductGallery } from "@/components/ProductGallery";
+import { useCartStore } from "@/lib/cart/store";
+import { MAX_QTY_PER_ITEM } from "@/lib/cart/types";
 import type { ProductDetail as ProductDetailType } from "@/lib/products.types";
 
 function formatPrice(value: number): string {
@@ -21,6 +23,9 @@ export function ProductDetail({ product }: Props) {
   );
   const [selectedSizeId, setSelectedSizeId] = useState<string | null>(null);
   const [wishlisted, setWishlisted] = useState(false);
+  const [quantity, setQuantity] = useState(1);
+
+  const addItem = useCartStore((s) => s.addItem);
 
   // Sizes available for the currently-selected color (in stock > 0). Sizes
   // that exist but aren't stocked for this color are still shown, just
@@ -71,6 +76,54 @@ export function ProductDetail({ product }: Props) {
 
   const canAddToBag =
     selectedVariant !== null && selectedVariant.inStock > 0;
+
+  const maxQty = Math.min(
+    selectedVariant?.inStock ?? 1,
+    MAX_QTY_PER_ITEM,
+  );
+
+  // Reset quantity to 1 whenever the selected variant changes. React 19's
+  // recommended "derive during render" pattern: track the last variant id
+  // in state and reset on mismatch, so the displayed quantity always matches
+  // the new variant's bounds without queueing an effect.
+  const [lastVariantId, setLastVariantId] = useState<string | null>(
+    selectedVariant?.id ?? null,
+  );
+  if ((selectedVariant?.id ?? null) !== lastVariantId) {
+    setLastVariantId(selectedVariant?.id ?? null);
+    setQuantity(1);
+  }
+  const effectiveQty = Math.min(quantity, Math.max(maxQty, 1));
+
+  function handleAddToBag() {
+    if (!selectedVariant) return;
+    const color = selectedVariant.color;
+    const size = selectedVariant.size;
+    const primaryImage =
+      product.images.find(
+        (img) => img.colorSlug === color.slug && img.isPrimary,
+      ) ??
+      product.images.find((img) => img.colorSlug === color.slug) ??
+      product.images.find((img) => img.isPrimary) ??
+      product.images[0] ??
+      null;
+
+    addItem(
+      {
+        variantId: selectedVariant.id,
+        productId: product.id,
+        productSlug: product.slug,
+        productName: product.name,
+        imageUrl: primaryImage?.url ?? null,
+        color: { name: color.name, hexCode: color.hexCode },
+        size: { name: size.name },
+        price: selectedVariant.salePrice ?? selectedVariant.price,
+        fullPrice: selectedVariant.price,
+        inStock: selectedVariant.inStock,
+      },
+      effectiveQty,
+    );
+  }
 
   return (
     <section
@@ -214,11 +267,44 @@ export function ProductDetail({ product }: Props) {
           </div>
         )}
 
+        {/* Quantity */}
+        <div>
+          <h2 className="mb-3 text-sm font-medium text-neutral-900 dark:text-neutral-100">
+            Quantity
+          </h2>
+          <div className="inline-flex items-center rounded-full border border-neutral-300 dark:border-neutral-700">
+            <button
+              type="button"
+              aria-label="Decrease quantity"
+              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+              disabled={effectiveQty <= 1}
+              className="flex h-10 w-10 items-center justify-center text-neutral-700 transition hover:text-neutral-900 disabled:opacity-40 dark:text-neutral-200 dark:hover:text-white"
+            >
+              −
+            </button>
+            <span className="w-10 text-center text-sm tabular-nums">
+              {effectiveQty}
+            </span>
+            <button
+              type="button"
+              aria-label="Increase quantity"
+              onClick={() =>
+                setQuantity((q) => Math.min(maxQty, q + 1))
+              }
+              disabled={effectiveQty >= maxQty}
+              className="flex h-10 w-10 items-center justify-center text-neutral-700 transition hover:text-neutral-900 disabled:opacity-40 dark:text-neutral-200 dark:hover:text-white"
+            >
+              +
+            </button>
+          </div>
+        </div>
+
         {/* Actions */}
         <div className="mt-2 flex flex-col gap-3">
           <button
             type="button"
             disabled={!canAddToBag}
+            onClick={handleAddToBag}
             className="inline-flex h-12 items-center justify-center rounded-full bg-neutral-900 px-6 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
           >
             {selectedVariant

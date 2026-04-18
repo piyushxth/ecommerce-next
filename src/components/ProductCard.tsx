@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { ProductCardQuickAdd } from "@/components/ProductCardQuickAdd";
 import type { ProductListItem } from "@/lib/products.types";
 
 function formatPrice(value: number): string {
@@ -43,6 +44,8 @@ export function ProductCard({ product }: { product: ProductListItem }) {
             Sale
           </span>
         )}
+
+        <ProductCardQuickAdd product={product} />
       </div>
 
       <div className="mt-4 space-y-1">

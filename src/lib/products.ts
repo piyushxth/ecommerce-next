@@ -248,6 +248,49 @@ export async function listProducts(
         as: "variantColors",
       },
     },
+    // Pick the first in-stock variant for the ProductCard quick-add button.
+    // Falls back to the first variant overall so a card for an out-of-stock
+    // product still has something to bind to (the button will be disabled).
+    {
+      $set: {
+        quickAddRaw: {
+          $let: {
+            vars: {
+              inStock: {
+                $filter: {
+                  input: "$variants",
+                  as: "v",
+                  cond: { $gt: ["$$v.inStock", 0] },
+                },
+              },
+            },
+            in: {
+              $cond: [
+                { $gt: [{ $size: "$$inStock" }, 0] },
+                { $arrayElemAt: ["$$inStock", 0] },
+                { $arrayElemAt: ["$variants", 0] },
+              ],
+            },
+          },
+        },
+      },
+    },
+    {
+      $lookup: {
+        from: "colors",
+        localField: "quickAddRaw.colorId",
+        foreignField: "_id",
+        as: "quickAddColor",
+      },
+    },
+    {
+      $lookup: {
+        from: "sizes",
+        localField: "quickAddRaw.sizeId",
+        foreignField: "_id",
+        as: "quickAddSize",
+      },
+    },
     {
       $unwind: { path: "$category", preserveNullAndEmptyArrays: true },
     },
@@ -268,6 +311,9 @@ export async function listProducts(
         category: { name: "$category.name", slug: "$category.slug" },
         gender: { label: "$gender.label", slug: "$gender.slug" },
         variantColors: { name: 1, slug: 1, hexCode: 1 },
+        quickAddRaw: 1,
+        quickAddColor: { $arrayElemAt: ["$quickAddColor", 0] },
+        quickAddSize: { $arrayElemAt: ["$quickAddSize", 0] },
       },
     },
   );
@@ -283,6 +329,15 @@ export async function listProducts(
     category?: { name: string; slug: string } | null;
     gender?: { label: string; slug: string } | null;
     variantColors: { name: string; slug: string; hexCode: string }[];
+    quickAddRaw?: {
+      _id: mongoose.Types.ObjectId;
+      sku: string;
+      price: number;
+      salePrice: number | null;
+      inStock: number;
+    } | null;
+    quickAddColor?: { name: string; hexCode: string } | null;
+    quickAddSize?: { name: string } | null;
   };
 
   const docs = (await Product.aggregate<AggResult>(pipeline)) as AggResult[];
@@ -299,6 +354,21 @@ export async function listProducts(
       d.hasSale && d.effectivePrice !== null && d.effectivePrice !== d.fullPrice,
     primaryImageUrl: d.primaryImage?.url ?? null,
     colors: (d.variantColors ?? []).sort((a, b) => a.name.localeCompare(b.name)),
+    quickAddVariant:
+      d.quickAddRaw && d.quickAddColor && d.quickAddSize
+        ? {
+            id: String(d.quickAddRaw._id),
+            sku: d.quickAddRaw.sku,
+            price: d.quickAddRaw.price,
+            salePrice: d.quickAddRaw.salePrice ?? null,
+            inStock: d.quickAddRaw.inStock,
+            color: {
+              name: d.quickAddColor.name,
+              hexCode: d.quickAddColor.hexCode,
+            },
+            size: { name: d.quickAddSize.name },
+          }
+        : null,
   }));
 }
 
@@ -599,6 +669,46 @@ export async function getRecommendedProducts(params: {
         as: "variantColors",
       },
     },
+    {
+      $set: {
+        quickAddRaw: {
+          $let: {
+            vars: {
+              inStock: {
+                $filter: {
+                  input: "$variants",
+                  as: "v",
+                  cond: { $gt: ["$$v.inStock", 0] },
+                },
+              },
+            },
+            in: {
+              $cond: [
+                { $gt: [{ $size: "$$inStock" }, 0] },
+                { $arrayElemAt: ["$$inStock", 0] },
+                { $arrayElemAt: ["$variants", 0] },
+              ],
+            },
+          },
+        },
+      },
+    },
+    {
+      $lookup: {
+        from: "colors",
+        localField: "quickAddRaw.colorId",
+        foreignField: "_id",
+        as: "quickAddColor",
+      },
+    },
+    {
+      $lookup: {
+        from: "sizes",
+        localField: "quickAddRaw.sizeId",
+        foreignField: "_id",
+        as: "quickAddSize",
+      },
+    },
     { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
     { $unwind: { path: "$gender", preserveNullAndEmptyArrays: true } },
     { $sort: { createdAt: -1, _id: 1 } },
@@ -614,6 +724,9 @@ export async function getRecommendedProducts(params: {
         category: { name: "$category.name", slug: "$category.slug" },
         gender: { label: "$gender.label", slug: "$gender.slug" },
         variantColors: { name: 1, slug: 1, hexCode: 1 },
+        quickAddRaw: 1,
+        quickAddColor: { $arrayElemAt: ["$quickAddColor", 0] },
+        quickAddSize: { $arrayElemAt: ["$quickAddSize", 0] },
       },
     },
   ];
@@ -629,6 +742,15 @@ export async function getRecommendedProducts(params: {
     category?: { name: string; slug: string } | null;
     gender?: { label: string; slug: string } | null;
     variantColors: { name: string; slug: string; hexCode: string }[];
+    quickAddRaw?: {
+      _id: mongoose.Types.ObjectId;
+      sku: string;
+      price: number;
+      salePrice: number | null;
+      inStock: number;
+    } | null;
+    quickAddColor?: { name: string; hexCode: string } | null;
+    quickAddSize?: { name: string } | null;
   };
 
   const toItem = (d: AggResult): ProductListItem => ({
@@ -648,6 +770,21 @@ export async function getRecommendedProducts(params: {
     colors: (d.variantColors ?? []).sort((a, b) =>
       a.name.localeCompare(b.name),
     ),
+    quickAddVariant:
+      d.quickAddRaw && d.quickAddColor && d.quickAddSize
+        ? {
+            id: String(d.quickAddRaw._id),
+            sku: d.quickAddRaw.sku,
+            price: d.quickAddRaw.price,
+            salePrice: d.quickAddRaw.salePrice ?? null,
+            inStock: d.quickAddRaw.inStock,
+            color: {
+              name: d.quickAddColor.name,
+              hexCode: d.quickAddColor.hexCode,
+            },
+            size: { name: d.quickAddSize.name },
+          }
+        : null,
   });
 
   // 1) Same category (preferred)
