@@ -33,14 +33,17 @@ export function CartBootstrap() {
   // (hydrate only).
   const lastStatusRef = useRef<typeof status | null>(null);
   const lastUserIdRef = useRef<string | null>(null);
-  // Monotonic token bumped on every auth transition. An in-flight
-  // hydrate/merge that started for user A is invalidated the moment this
-  // counter advances (logout, sign-in as B, etc.) so its late response
-  // can't overwrite the newly-applied guest/other-user state.
+  // Monotonic token bumped on every auth transition. Each kickoff snapshots
+  // the current value and only writes back to the store if the counter is
+  // still the same when the network resolves — so a late response from
+  // user A's hydrate/merge can't overwrite a newly-applied guest reset or
+  // a fresh login as user B. This single mechanism also de-duplicates
+  // React strict-mode double-effect fires (the second fire invalidates
+  // the first via the same generation check), which is why we no longer
+  // need a separate in-flight ref. An in-flight ref here is harmful
+  // because blocking a legitimate re-fire on auth transition can leave
+  // the store stuck in guest mode until the page is refreshed.
   const generationRef = useRef(0);
-  // Guard against React 18 strict-mode double effects firing the merge
-  // endpoint twice.
-  const inFlightRef = useRef(false);
 
   useEffect(() => {
     // Wait for both the session to settle and the localStorage rehydration
@@ -58,20 +61,15 @@ export function CartBootstrap() {
       const isFirstSignIn =
         prevStatus === "unauthenticated" || prevStatus === null;
 
-      if (!inFlightRef.current) {
-        inFlightRef.current = true;
-        generationRef.current += 1;
-        const myGeneration = generationRef.current;
-        const isActive = () => generationRef.current === myGeneration;
-        const run = userChanged || prevStatus === null
-          ? hydrateServerCart
-          : isFirstSignIn
-            ? mergeAndHydrateServerCart
-            : hydrateServerCart;
-        void run({ isActive }).finally(() => {
-          inFlightRef.current = false;
-        });
-      }
+      generationRef.current += 1;
+      const myGeneration = generationRef.current;
+      const isActive = () => generationRef.current === myGeneration;
+      const run = userChanged || prevStatus === null
+        ? hydrateServerCart
+        : isFirstSignIn
+          ? mergeAndHydrateServerCart
+          : hydrateServerCart;
+      void run({ isActive });
     } else if (status === "unauthenticated" && prevStatus === "authenticated") {
       // Signed out: invalidate any in-flight hydrate/merge so it can't
       // resurrect the previous user's items after we reset, then switch
