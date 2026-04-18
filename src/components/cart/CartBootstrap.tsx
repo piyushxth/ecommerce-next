@@ -33,6 +33,11 @@ export function CartBootstrap() {
   // (hydrate only).
   const lastStatusRef = useRef<typeof status | null>(null);
   const lastUserIdRef = useRef<string | null>(null);
+  // Monotonic token bumped on every auth transition. An in-flight
+  // hydrate/merge that started for user A is invalidated the moment this
+  // counter advances (logout, sign-in as B, etc.) so its late response
+  // can't overwrite the newly-applied guest/other-user state.
+  const generationRef = useRef(0);
   // Guard against React 18 strict-mode double effects firing the merge
   // endpoint twice.
   const inFlightRef = useRef(false);
@@ -55,19 +60,23 @@ export function CartBootstrap() {
 
       if (!inFlightRef.current) {
         inFlightRef.current = true;
+        generationRef.current += 1;
+        const myGeneration = generationRef.current;
+        const isActive = () => generationRef.current === myGeneration;
         const run = userChanged || prevStatus === null
           ? hydrateServerCart
           : isFirstSignIn
             ? mergeAndHydrateServerCart
             : hydrateServerCart;
-        void run().finally(() => {
+        void run({ isActive }).finally(() => {
           inFlightRef.current = false;
         });
       }
     } else if (status === "unauthenticated" && prevStatus === "authenticated") {
-      // Signed out: switch back to guest mode with an empty bag, so the
-      // previous user's items don't leak to whoever is at this browser
-      // next.
+      // Signed out: invalidate any in-flight hydrate/merge so it can't
+      // resurrect the previous user's items after we reset, then switch
+      // back to guest mode with an empty bag.
+      generationRef.current += 1;
       resetToGuest([]);
     }
 

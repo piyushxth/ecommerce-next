@@ -213,14 +213,31 @@ export const useCartStore = create<CartState>()(
   ),
 );
 
+// Caller-supplied check so CartBootstrap can invalidate a hydrate/merge that
+// was kicked off for user A but resolves after the user has already signed
+// out or switched to user B. Without this, a slow network response can
+// overwrite the guest-reset state applied on logout.
+export type CartSyncOptions = { isActive?: () => boolean };
+
+function isStillActive(opts?: CartSyncOptions): boolean {
+  return opts?.isActive ? opts.isActive() : true;
+}
+
 // Fetches the server cart and flips the store into "user" mode. Called from
 // <CartBootstrap/> once the session becomes authenticated.
-export async function hydrateServerCart(): Promise<void> {
+export async function hydrateServerCart(
+  opts?: CartSyncOptions,
+): Promise<void> {
   try {
     const items = await apiGetCart();
+    // The session may have changed while we were awaiting the network —
+    // bail out instead of clobbering the new authoritative state.
+    if (!isStillActive(opts)) return;
     useCartStore.getState().setServerCart(items);
     // Remove localStorage copy so a logout→different login on the same
-    // browser doesn't resurrect the previous user's items.
+    // browser doesn't resurrect the previous user's items. Only runs on
+    // the success path so a transient network failure doesn't destroy
+    // the guest cart.
     if (typeof window !== "undefined") {
       window.localStorage.removeItem("ecom-cart");
     }
@@ -232,35 +249,43 @@ export async function hydrateServerCart(): Promise<void> {
 
 // POSTs the guest cart up and flips to "user" mode with the merged result.
 // Called on the sign-in transition (guest → user).
-export async function mergeAndHydrateServerCart(): Promise<void> {
+export async function mergeAndHydrateServerCart(
+  opts?: CartSyncOptions,
+): Promise<void> {
   const guestItems = useCartStore.getState().items.map((i) => ({
     variantId: i.variantId,
     quantity: i.quantity,
   }));
 
-  try {
-    if (guestItems.length > 0) {
-      const res = await fetch("/api/cart/merge", {
-        method: "POST",
-        cache: "no-store",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ items: guestItems }),
-      });
-      if (!res.ok) throw new Error(`POST /api/cart/merge ${res.status}`);
-      const data = (await res.json()) as { items: CartItem[] };
-      useCartStore.getState().setServerCart(data.items);
-    } else {
-      await hydrateServerCart();
-      return;
-    }
-  } catch {
-    // Fall back to a plain GET so the user at least sees their server cart.
-    await hydrateServerCart();
+  if (guestItems.length === 0) {
+    await hydrateServerCart(opts);
+    return;
   }
 
-  if (typeof window !== "undefined") {
-    window.localStorage.removeItem("ecom-cart");
+  try {
+    const res = await fetch("/api/cart/merge", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ items: guestItems }),
+    });
+    if (!res.ok) throw new Error(`POST /api/cart/merge ${res.status}`);
+    const data = (await res.json()) as { items: CartItem[] };
+
+    if (!isStillActive(opts)) return;
+
+    useCartStore.getState().setServerCart(data.items);
+    // Only clear localStorage on the *success* path — a transient failure
+    // should leave the guest cart intact so the next attempt can retry.
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("ecom-cart");
+    }
+  } catch {
+    // Merge failed. Fall back to a plain GET so the user at least sees
+    // their server cart; hydrateServerCart owns the localStorage clear on
+    // its own success path.
+    await hydrateServerCart(opts);
   }
 }
 
