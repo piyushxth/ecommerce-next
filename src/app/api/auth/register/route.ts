@@ -63,6 +63,19 @@ export async function POST(request: Request) {
       { status: 201 },
     );
   } catch (error) {
+    // Handle the race condition where two concurrent requests both pass the
+    // findOne check and the second insert fails with a duplicate-key error.
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      (error as { code: unknown }).code === 11000
+    ) {
+      return NextResponse.json(
+        { message: "An account with that email already exists." },
+        { status: 409 },
+      );
+    }
     console.error("[register] Unexpected error:", error);
     return NextResponse.json(
       { message: "Something went wrong. Please try again." },
