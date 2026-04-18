@@ -9,10 +9,20 @@ import { signIn } from "next-auth/react";
 
 import { loginSchema, type LoginInput } from "@/lib/validations/auth";
 
+// Only accept same-origin relative paths. Rejects absolute URLs
+// (`https://evil.com/...`) and protocol-relative URLs (`//evil.com`) so a
+// crafted `?callbackUrl=` param can't turn this page into an open redirect.
+function safeCallbackUrl(raw: string | null): string {
+  const fallback = "/dashboard";
+  if (!raw) return fallback;
+  if (!raw.startsWith("/") || raw.startsWith("//")) return fallback;
+  return raw;
+}
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
+  const callbackUrl = safeCallbackUrl(searchParams.get("callbackUrl"));
   const googleEnabled =
     process.env.NEXT_PUBLIC_GOOGLE_ENABLED === "true";
 
