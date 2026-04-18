@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { ProductGallery } from "@/components/ProductGallery";
 import { useCartStore } from "@/lib/cart/store";
+import { MAX_QTY_PER_ITEM } from "@/lib/cart/types";
 import type { ProductDetail as ProductDetailType } from "@/lib/products.types";
 
 function formatPrice(value: number): string {
@@ -76,7 +77,22 @@ export function ProductDetail({ product }: Props) {
   const canAddToBag =
     selectedVariant !== null && selectedVariant.inStock > 0;
 
-  const maxQty = selectedVariant?.inStock ?? 1;
+  const maxQty = Math.min(
+    selectedVariant?.inStock ?? 1,
+    MAX_QTY_PER_ITEM,
+  );
+
+  // Reset quantity to 1 whenever the selected variant changes. React 19's
+  // recommended "derive during render" pattern: track the last variant id
+  // in state and reset on mismatch, so the displayed quantity always matches
+  // the new variant's bounds without queueing an effect.
+  const [lastVariantId, setLastVariantId] = useState<string | null>(
+    selectedVariant?.id ?? null,
+  );
+  if ((selectedVariant?.id ?? null) !== lastVariantId) {
+    setLastVariantId(selectedVariant?.id ?? null);
+    setQuantity(1);
+  }
   const effectiveQty = Math.min(quantity, Math.max(maxQty, 1));
 
   function handleAddToBag() {

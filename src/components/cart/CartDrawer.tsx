@@ -9,6 +9,7 @@ import {
   selectCartSubtotal,
   useCartStore,
 } from "@/lib/cart/store";
+import { MAX_QTY_PER_ITEM } from "@/lib/cart/types";
 
 function formatPrice(value: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -189,7 +190,10 @@ export function CartDrawer() {
                           setQuantity(item.variantId, item.quantity + 1)
                         }
                         className="flex h-8 w-8 items-center justify-center text-neutral-700 transition hover:text-neutral-900 disabled:opacity-40 dark:text-neutral-200 dark:hover:text-white"
-                        disabled={item.quantity >= item.inStock}
+                        disabled={
+                          item.quantity >=
+                          Math.min(item.inStock, MAX_QTY_PER_ITEM)
+                        }
                       >
                         +
                       </button>
