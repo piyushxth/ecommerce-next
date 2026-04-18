@@ -13,6 +13,19 @@ export const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 
 export const DEFAULT_SORT: SortKey = "newest";
 
+// A trimmed variant payload shipped with each list card so the ProductCard
+// quick-add button can drop the first in-stock variant into the cart without
+// navigating to the detail page (same pattern as nike.com / zara.com).
+export type QuickAddVariant = {
+  id: string;
+  sku: string;
+  price: number;
+  salePrice: number | null;
+  inStock: number;
+  color: { name: string; hexCode: string };
+  size: { name: string };
+};
+
 export type ProductListItem = {
   id: string;
   name: string;
@@ -24,6 +37,7 @@ export type ProductListItem = {
   isOnSale: boolean;
   primaryImageUrl: string | null;
   colors: { name: string; slug: string; hexCode: string }[];
+  quickAddVariant: QuickAddVariant | null;
 };
 
 export type ProductFilterOptions = {
