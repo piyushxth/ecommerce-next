@@ -50,9 +50,9 @@ export const checkoutSchema = z
     email: z.string().trim().email("Enter a valid email"),
     shipping: addressSchema,
     billingSameAsShipping: z.boolean(),
-    // Optional on the wire: when `billingSameAsShipping` is true the client
-    // may omit this and the server copies shipping into billing. When false
-    // the superRefine below requires it.
+    // Optional on the wire: when `billingSameAsShipping` is true the server
+    // copies shipping into billing. When false, the superRefine below
+    // requires it.
     billing: addressSchema.optional(),
     notes: z.string().trim().max(500, "Notes are too long"),
   })

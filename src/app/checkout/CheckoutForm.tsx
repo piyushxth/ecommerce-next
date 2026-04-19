@@ -44,6 +44,13 @@ export function CheckoutForm({ defaultEmail, defaultFullName, items }: Props) {
     formState: { errors, isSubmitting },
   } = useForm<CheckoutInput>({
     resolver: zodResolver(checkoutSchema),
+    // `shouldUnregister: true` is load-bearing: without it, RHF keeps stale
+    // billing values in form state after the user un-checks "Same as
+    // shipping", fills nothing, then re-checks it. On submit those empty
+    // strings would fail `addressSchema.min()` checks inside the resolver,
+    // but the billing fields are unmounted so the errors wouldn't render —
+    // the form would just silently refuse to submit.
+    shouldUnregister: true,
     defaultValues: {
       email: defaultEmail,
       shipping: {
