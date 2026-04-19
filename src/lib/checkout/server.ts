@@ -78,6 +78,11 @@ export async function placeOrder(
     variants.map((v) => [String(v._id), v]),
   );
 
+  // Advisory stock check: rejects the obvious "cart has 5, only 2 in stock"
+  // case and unavailable variants. NOT a hold/reservation — we don't decrement
+  // inStock here because real stock consumption belongs at payment capture
+  // (concurrent buyers can each pass this check). The payment integration
+  // will do the atomic `bulkWrite` with `{ inStock: { $gte: qty } }` guards.
   for (const item of cartItems) {
     const v = variantById.get(String(item.productVariantId));
     if (!v) {
@@ -131,6 +136,8 @@ export async function placeOrder(
       totalAmount,
       shippingAddressId: shippingAddr._id,
       billingAddressId: billingAddr._id,
+      notes: (payload.notes ?? "").trim(),
+      contactEmail: payload.email.trim(),
     },
   ]);
 
@@ -173,6 +180,8 @@ export type OrderSummary = {
   status: string;
   totalAmount: number;
   createdAt: string;
+  notes: string;
+  contactEmail: string;
   items: OrderSummaryItem[];
   shipping: {
     fullName: string;
@@ -290,6 +299,8 @@ export async function getOrderSummary(
     status: order.status,
     totalAmount: order.totalAmount,
     createdAt: (order.createdAt ?? new Date()).toISOString(),
+    notes: order.notes ?? "",
+    contactEmail: order.contactEmail ?? "",
     items,
     shipping: {
       fullName: shipping.fullName,

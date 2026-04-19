@@ -127,6 +127,17 @@ export default async function OrderSuccessPage({
         </div>
       </section>
 
+      {order.notes ? (
+        <section className="mt-8">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            Delivery notes
+          </h3>
+          <p className="whitespace-pre-wrap rounded-lg border border-neutral-200 p-4 text-sm text-neutral-700 dark:border-neutral-800 dark:text-neutral-300">
+            {order.notes}
+          </p>
+        </section>
+      ) : null}
+
       <div className="mt-10 flex justify-center">
         <Link
           href="/products"
