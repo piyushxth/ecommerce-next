@@ -219,16 +219,13 @@ export function CartDrawer() {
             <p className="text-[11px] text-neutral-500">
               Shipping and taxes calculated at checkout.
             </p>
-            <button
-              type="button"
+            <Link
+              href="/checkout"
+              onClick={close}
               className="inline-flex h-11 w-full items-center justify-center rounded-full bg-neutral-900 text-sm font-medium text-white transition hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-              onClick={() => {
-                // Checkout is a placeholder; wired in a later PR.
-                close();
-              }}
             >
               Proceed to checkout
-            </button>
+            </Link>
             <Link
               href="/products"
               onClick={close}

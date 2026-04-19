@@ -37,6 +37,8 @@ const orderSchema = new Schema(
       ref: "Address",
       required: true,
     },
+    notes: { type: String, trim: true, maxlength: 500, default: "" },
+    contactEmail: { type: String, trim: true, maxlength: 254, default: "" },
   },
   { timestamps: true },
 );
