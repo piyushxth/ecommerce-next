@@ -53,12 +53,22 @@ export async function Navbar() {
 
           <div className="ml-auto flex items-center gap-2">
             {session?.user ? (
-              <Link
-                href="/dashboard"
-                className="hidden text-sm text-neutral-700 hover:text-neutral-900 sm:inline dark:text-neutral-300 dark:hover:text-white"
-              >
-                {session.user.name ?? session.user.email ?? "Account"}
-              </Link>
+              <>
+                {session.user.role === "admin" ? (
+                  <Link
+                    href="/admin"
+                    className="hidden rounded-full border border-neutral-900 px-3 py-1.5 text-xs font-medium text-neutral-900 transition hover:bg-neutral-900 hover:text-white sm:inline-block dark:border-white dark:text-white dark:hover:bg-white dark:hover:text-neutral-900"
+                  >
+                    Admin
+                  </Link>
+                ) : null}
+                <Link
+                  href="/dashboard"
+                  className="hidden text-sm text-neutral-700 hover:text-neutral-900 sm:inline dark:text-neutral-300 dark:hover:text-white"
+                >
+                  {session.user.name ?? session.user.email ?? "Account"}
+                </Link>
+              </>
             ) : (
               <>
                 <Link
